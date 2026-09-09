@@ -1,0 +1,4 @@
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+clickhouse-connect==1.8.0
+pydantic-settings==2.15.0
