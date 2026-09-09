@@ -14,9 +14,11 @@ class FakeClient:
     def __init__(self, result):
         self.result = result
         self.queries: list[str] = []
+        self.query_params: list[dict | None] = []
 
-    def query(self, sql: str):
+    def query(self, sql: str, parameters: dict | None = None):
         self.queries.append(sql)
+        self.query_params.append(parameters)
         if isinstance(self.result, dict):
             for key, value in self.result.items():
                 if key in sql:

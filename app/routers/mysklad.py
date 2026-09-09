@@ -9,10 +9,21 @@ router = APIRouter(prefix="/mysklad", tags=["mysklad"])
 
 
 @router.get("/orders-supplies", response_model=list[MyskladOrderSupply])
-def orders_supplies(limit: int = 100, client: Client = Depends(get_ch_client)):
-    return fetch_mysklad_orders_supplies(client, limit=limit)
+def orders_supplies(
+    limit: int = 100,
+    id_client: int | None = None,
+    client: Client = Depends(get_ch_client),
+):
+    return fetch_mysklad_orders_supplies(client, limit=limit, id_client=id_client)
 
 
 @router.get("/supplies-marketplaces", response_model=list[MyskladSupplyMarketplace])
-def supplies_marketplaces(limit: int = 100, client: Client = Depends(get_ch_client)):
-    return fetch_mysklad_supplies_marketplaces(client, limit=limit)
+def supplies_marketplaces(
+    limit: int = 100,
+    id_client: int | None = None,
+    marketplace: str | None = None,
+    client: Client = Depends(get_ch_client),
+):
+    return fetch_mysklad_supplies_marketplaces(
+        client, limit=limit, id_client=id_client, marketplace=marketplace
+    )
