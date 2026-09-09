@@ -1,13 +1,19 @@
+import datetime
+
 from clickhouse_connect.driver.client import Client
 
 from app.models import (
+    FbsOrderCount,
+    LogisticsExpenses,
     MyskladOrderSupply,
     MyskladSupplyMarketplace,
+    OzonLogisticsExpenses,
     OzonStockFbo,
     OzonStockFbs,
     UnifiedStock,
     WatchdogFreshness,
     WatchdogRun,
+    WbLogisticsExpenses,
     WbStockFbo,
     WbStockFbs,
 )
@@ -149,3 +155,99 @@ def fetch_watchdog_runs(client: Client, limit: int = 100) -> list[WatchdogRun]:
         client,
         f"SELECT * FROM watchdog.runs ORDER BY started_at DESC LIMIT {limit}",
     )
+
+
+def fetch_logistics_expenses(
+    client: Client,
+    date_from: datetime.date,
+    date_to: datetime.date,
+    id_client: int | None = None,
+) -> LogisticsExpenses:
+    ozon_conditions = ["date_operation BETWEEN {date_from:Date} AND {date_to:Date}"]
+    ozon_params = {"date_from": date_from, "date_to": date_to}
+    if id_client is not None:
+        ozon_conditions.append("id_client = {id_client:UInt8}")
+        ozon_params["id_client"] = id_client
+    ozon_where = " AND ".join(ozon_conditions)
+
+    ozon_count = client.query(
+        f"SELECT count() FROM ozon.expenses_agg WHERE {ozon_where}", parameters=ozon_params
+    ).result_rows[0][0]
+
+    if ozon_count == 0:
+        ozon = None
+    else:
+        logistics_cost, returned_logistics_cost, last_mile_cost, cancel_last_mile_cost = (
+            float(v)
+            for v in client.query(
+                f"""SELECT sum(logistick_cost), sum(returned_logistick_cost),
+                           sum(last_mile_cost), sum(cancel_last_mile_cost)
+                    FROM ozon.expenses_agg WHERE {ozon_where}""",
+                parameters=ozon_params,
+            ).result_rows[0]
+        )
+        ozon = OzonLogisticsExpenses(
+            logistics_cost=logistics_cost,
+            returned_logistics_cost=returned_logistics_cost,
+            last_mile_cost=last_mile_cost,
+            cancel_last_mile_cost=cancel_last_mile_cost,
+            total=logistics_cost + returned_logistics_cost + last_mile_cost + cancel_last_mile_cost,
+        )
+
+    # wildberies.logistics_costs has no id_client column — date range only.
+    wb_where = "date BETWEEN {date_from:Date} AND {date_to:Date}"
+    wb_params = {"date_from": date_from, "date_to": date_to}
+
+    wb_count = client.query(
+        f"SELECT count() FROM wildberies.logistics_costs WHERE {wb_where}", parameters=wb_params
+    ).result_rows[0][0]
+
+    if wb_count == 0:
+        wb = None
+    else:
+        wb_logistics_cost, wb_reverse_logistics_cost = (
+            float(v)
+            for v in client.query(
+                f"""SELECT sum(logistics_cost), sum(reverse_logistics_cost)
+                    FROM wildberies.logistics_costs WHERE {wb_where}""",
+                parameters=wb_params,
+            ).result_rows[0]
+        )
+        wb = WbLogisticsExpenses(
+            logistics_cost=wb_logistics_cost,
+            reverse_logistics_cost=wb_reverse_logistics_cost,
+            total=wb_logistics_cost + wb_reverse_logistics_cost,
+        )
+
+    return LogisticsExpenses(date_from=date_from, date_to=date_to, ozon=ozon, wb=wb)
+
+
+def fetch_fbs_order_count(
+    client: Client,
+    date_from: datetime.date,
+    date_to: datetime.date,
+    id_client: int | None = None,
+) -> FbsOrderCount:
+    ozon_conditions = ["in_process_at BETWEEN {date_from:Date} AND {date_to:Date}"]
+    ozon_params = {"date_from": date_from, "date_to": date_to}
+    if id_client is not None:
+        ozon_conditions.append("id_client = {id_client:UInt8}")
+        ozon_params["id_client"] = id_client
+    ozon_where = " AND ".join(ozon_conditions)
+
+    ozon_count = client.query(
+        f"SELECT count() FROM ozon.ozon_fbs_postings WHERE {ozon_where}", parameters=ozon_params
+    ).result_rows[0][0]
+
+    wb_conditions = ["fbs = true", "date BETWEEN {date_from:Date} AND {date_to:Date}"]
+    wb_params = {"date_from": date_from, "date_to": date_to}
+    if id_client is not None:
+        wb_conditions.append("id_client = {id_client:UInt8}")
+        wb_params["id_client"] = id_client
+    wb_where = " AND ".join(wb_conditions)
+
+    wb_count = client.query(
+        f"SELECT count() FROM wildberies.orders WHERE {wb_where}", parameters=wb_params
+    ).result_rows[0][0]
+
+    return FbsOrderCount(date_from=date_from, date_to=date_to, ozon=ozon_count, wb=wb_count)

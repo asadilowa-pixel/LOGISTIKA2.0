@@ -7,9 +7,12 @@ class FakeQueryResult:
 class FakeClient:
     """Stands in for clickhouse_connect's Client in tests. Every call is
     recorded so tests can assert on the table/limit that was actually
-    queried. `result` is either a single FakeQueryResult returned for every
-    call, or a dict of {table-name-substring: FakeQueryResult} for callers
-    (like fetch_unified_stocks) that query more than one table."""
+    queried. `result` is a single FakeQueryResult returned for every
+    call, a dict of {table-name-substring: FakeQueryResult} for callers
+    (like fetch_unified_stocks) that query more than one table, or a list of
+    FakeQueryResult consumed in call order for callers (like
+    fetch_logistics_expenses) that issue several sequential queries against
+    the same table (e.g. a count() then a sum())."""
 
     def __init__(self, result):
         self.result = result
@@ -24,6 +27,8 @@ class FakeClient:
                 if key in sql:
                     return value
             raise KeyError(f"no fake result configured for query: {sql}")
+        if isinstance(self.result, list):
+            return self.result.pop(0)
         return self.result
 
     def close(self):

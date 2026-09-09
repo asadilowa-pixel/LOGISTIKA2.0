@@ -1,6 +1,8 @@
 import datetime
 from dataclasses import dataclass
 
+from pydantic import BaseModel
+
 
 @dataclass
 class OzonStockFbo:
@@ -153,3 +155,31 @@ class WatchdogRun:
     fixed: int
     no_access: int
     mail_status: str
+
+
+class OzonLogisticsExpenses(BaseModel):
+    logistics_cost: float
+    returned_logistics_cost: float
+    last_mile_cost: float
+    cancel_last_mile_cost: float
+    total: float
+
+
+class WbLogisticsExpenses(BaseModel):
+    logistics_cost: float
+    reverse_logistics_cost: float
+    total: float
+
+
+class LogisticsExpenses(BaseModel):
+    date_from: datetime.date
+    date_to: datetime.date
+    ozon: OzonLogisticsExpenses | None
+    wb: WbLogisticsExpenses | None
+
+
+class FbsOrderCount(BaseModel):
+    date_from: datetime.date
+    date_to: datetime.date
+    ozon: int
+    wb: int
