@@ -84,6 +84,47 @@ class UnifiedStock:
 
 
 @dataclass
+class MyskladOrderSupply:
+    supply_id: str
+    updated: datetime.datetime
+    name: str
+    description: str
+    moment: datetime.datetime
+    created: datetime.datetime
+    sum: float
+    deliveryPlannedMoment: datetime.datetime
+    agent_name: str
+    position_id: str
+    article: str
+    quantity: float
+    price: float
+    name_cabinet: str
+    id_cabinet: int
+    id_client: int
+    update_at: datetime.datetime
+
+
+@dataclass
+class MyskladSupplyMarketplace:
+    supply_id: str
+    supply_name: str
+    moment: datetime.datetime
+    marketplace: str
+    supply_sum: float
+    position_id: str
+    quantity: int
+    price: float
+    product_id: str
+    article: str
+    product_name: str
+    path_name: str
+    name_cabinet: str
+    id_cabinet: int
+    id_client: int
+    update_at: datetime.datetime
+
+
+@dataclass
 class WatchdogFreshness:
     run_id: str
     checked_at: datetime.datetime

@@ -139,6 +139,45 @@ def test_unified_stocks_endpoint(client_with):
     assert marketplaces == {("ozon", "fbo"), ("ozon", "fbs"), ("wb", "fbo"), ("wb", "fbs")}
 
 
+def test_mysklad_orders_supplies_endpoint(client_with):
+    columns = [
+        "supply_id", "updated", "name", "description", "moment", "created",
+        "sum", "deliveryPlannedMoment", "agent_name", "position_id",
+        "article", "quantity", "price", "name_cabinet", "id_cabinet",
+        "id_client", "update_at",
+    ]
+    row = (
+        "sup1", UPDATE_AT, "Поставка 1", "descr", UPDATE_AT, UPDATE_AT,
+        1000.0, UPDATE_AT, "Поставщик", "pos1", "A1", 10.0, 100.0,
+        "Кабинет", 1, 1, UPDATE_AT,
+    )
+    client = client_with(FakeQueryResult(columns, [row]))
+
+    resp = client.get("/mysklad/orders-supplies")
+
+    assert resp.status_code == 200
+    assert resp.json()[0]["supply_id"] == "sup1"
+
+
+def test_mysklad_supplies_marketplaces_endpoint(client_with):
+    columns = [
+        "supply_id", "supply_name", "moment", "marketplace", "supply_sum",
+        "position_id", "quantity", "price", "product_id", "article",
+        "product_name", "path_name", "name_cabinet", "id_cabinet",
+        "id_client", "update_at",
+    ]
+    row = (
+        "sup2", "Поставка 2", UPDATE_AT, "ozon", 500.0, "pos2", 5, 100.0,
+        "prod1", "A2", "Товар", "путь", "Кабинет", 1, 1, UPDATE_AT,
+    )
+    client = client_with(FakeQueryResult(columns, [row]))
+
+    resp = client.get("/mysklad/supplies-marketplaces")
+
+    assert resp.status_code == 200
+    assert resp.json()[0]["marketplace"] == "ozon"
+
+
 def test_watchdog_freshness_endpoint(client_with):
     columns = [
         "run_id", "checked_at", "spreadsheet_id", "spreadsheet_name",

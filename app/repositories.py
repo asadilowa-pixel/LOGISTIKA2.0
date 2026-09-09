@@ -1,6 +1,8 @@
 from clickhouse_connect.driver.client import Client
 
 from app.models import (
+    MyskladOrderSupply,
+    MyskladSupplyMarketplace,
     OzonStockFbo,
     OzonStockFbs,
     UnifiedStock,
@@ -92,6 +94,22 @@ def fetch_unified_stocks(client: Client) -> list[UnifiedStock]:
         )
 
     return unified
+
+
+def fetch_mysklad_orders_supplies(client: Client, limit: int = 100) -> list[MyskladOrderSupply]:
+    return _rows_as(
+        MyskladOrderSupply,
+        client,
+        f"SELECT * FROM mysklad.orders_supplies ORDER BY moment DESC LIMIT {limit}",
+    )
+
+
+def fetch_mysklad_supplies_marketplaces(client: Client, limit: int = 100) -> list[MyskladSupplyMarketplace]:
+    return _rows_as(
+        MyskladSupplyMarketplace,
+        client,
+        f"SELECT * FROM mysklad.supplies_marketplaces ORDER BY moment DESC LIMIT {limit}",
+    )
 
 
 def fetch_watchdog_freshness(client: Client, limit: int = 100) -> list[WatchdogFreshness]:

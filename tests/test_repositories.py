@@ -1,6 +1,8 @@
 import datetime
 
 from app.repositories import (
+    fetch_mysklad_orders_supplies,
+    fetch_mysklad_supplies_marketplaces,
     fetch_ozon_stocks_fbo,
     fetch_ozon_stocks_fbs,
     fetch_unified_stocks,
@@ -147,6 +149,51 @@ def test_fetch_unified_stocks_combines_all_four_sources():
     wb_fbs = by_key[("wb", "fbs")]
     assert wb_fbs.warehouse == "Склад WB FBS"
     assert wb_fbs.quantity == 7
+
+
+def test_fetch_mysklad_orders_supplies_maps_rows_and_applies_limit():
+    columns = [
+        "supply_id", "updated", "name", "description", "moment", "created",
+        "sum", "deliveryPlannedMoment", "agent_name", "position_id",
+        "article", "quantity", "price", "name_cabinet", "id_cabinet",
+        "id_client", "update_at",
+    ]
+    row = (
+        "sup1", UPDATE_AT, "Поставка 1", "descr", UPDATE_AT, UPDATE_AT,
+        1000.0, UPDATE_AT, "Поставщик", "pos1", "A1", 10.0, 100.0,
+        "Кабинет", 1, 1, UPDATE_AT,
+    )
+    client = FakeClient(FakeQueryResult(columns, [row]))
+
+    result = fetch_mysklad_orders_supplies(client, limit=5)
+
+    assert len(result) == 1
+    assert result[0].supply_id == "sup1"
+    assert result[0].quantity == 10.0
+    assert "mysklad.orders_supplies" in client.queries[0]
+    assert "LIMIT 5" in client.queries[0]
+
+
+def test_fetch_mysklad_supplies_marketplaces_maps_rows_and_applies_limit():
+    columns = [
+        "supply_id", "supply_name", "moment", "marketplace", "supply_sum",
+        "position_id", "quantity", "price", "product_id", "article",
+        "product_name", "path_name", "name_cabinet", "id_cabinet",
+        "id_client", "update_at",
+    ]
+    row = (
+        "sup2", "Поставка 2", UPDATE_AT, "ozon", 500.0, "pos2", 5, 100.0,
+        "prod1", "A2", "Товар", "путь", "Кабинет", 1, 1, UPDATE_AT,
+    )
+    client = FakeClient(FakeQueryResult(columns, [row]))
+
+    result = fetch_mysklad_supplies_marketplaces(client, limit=5)
+
+    assert len(result) == 1
+    assert result[0].marketplace == "ozon"
+    assert result[0].quantity == 5
+    assert "mysklad.supplies_marketplaces" in client.queries[0]
+    assert "LIMIT 5" in client.queries[0]
 
 
 def test_fetch_watchdog_freshness_maps_rows_and_applies_limit():
