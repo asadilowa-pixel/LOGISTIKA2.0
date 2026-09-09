@@ -2,15 +2,21 @@ from clickhouse_connect.driver.client import Client
 from fastapi import APIRouter, Depends
 
 from app.dependencies import get_ch_client
-from app.models import OzonStockFbo, OzonStockFbs, WbStockFbo, WbStockFbs
+from app.models import OzonStockFbo, OzonStockFbs, UnifiedStock, WbStockFbo, WbStockFbs
 from app.repositories import (
     fetch_ozon_stocks_fbo,
     fetch_ozon_stocks_fbs,
+    fetch_unified_stocks,
     fetch_wb_stocks_fbo,
     fetch_wb_stocks_fbs,
 )
 
 router = APIRouter(prefix="/stocks", tags=["stocks"])
+
+
+@router.get("/unified", response_model=list[UnifiedStock])
+def unified(client: Client = Depends(get_ch_client)):
+    return fetch_unified_stocks(client)
 
 
 @router.get("/ozon/fbo", response_model=list[OzonStockFbo])

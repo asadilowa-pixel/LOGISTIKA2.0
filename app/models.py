@@ -72,6 +72,18 @@ class WbStockFbs:
 
 
 @dataclass
+class UnifiedStock:
+    marketplace: str  # "ozon" | "wb"
+    fulfillment: str  # "fbo" | "fbs"
+    article_seller: str
+    warehouse: str
+    quantity: int
+    cabinet: str
+    id_client: int
+    id_cabinet: int
+
+
+@dataclass
 class WatchdogFreshness:
     run_id: str
     checked_at: datetime.datetime

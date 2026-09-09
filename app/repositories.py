@@ -3,6 +3,7 @@ from clickhouse_connect.driver.client import Client
 from app.models import (
     OzonStockFbo,
     OzonStockFbs,
+    UnifiedStock,
     WatchdogFreshness,
     WatchdogRun,
     WbStockFbo,
@@ -29,6 +30,68 @@ def fetch_wb_stocks_fbo(client: Client) -> list[WbStockFbo]:
 
 def fetch_wb_stocks_fbs(client: Client) -> list[WbStockFbs]:
     return _rows_as(WbStockFbs, client, "SELECT * FROM wildberies.stocks_fbs")
+
+
+def fetch_unified_stocks(client: Client) -> list[UnifiedStock]:
+    unified = []
+
+    for row in fetch_ozon_stocks_fbo(client):
+        unified.append(
+            UnifiedStock(
+                marketplace="ozon",
+                fulfillment="fbo",
+                article_seller=row.article_seller,
+                warehouse=row.sklad_name,
+                quantity=row.stocks,
+                cabinet=row.name_cabinet,
+                id_client=row.id_client,
+                id_cabinet=row.id_cabinet,
+            )
+        )
+
+    for row in fetch_ozon_stocks_fbs(client):
+        unified.append(
+            UnifiedStock(
+                marketplace="ozon",
+                fulfillment="fbs",
+                article_seller=row.article_seller,
+                warehouse=row.sklad_name,
+                quantity=row.stocks,
+                cabinet=row.name_cabinet,
+                id_client=row.id_client,
+                id_cabinet=row.id_cabinet,
+            )
+        )
+
+    for row in fetch_wb_stocks_fbo(client):
+        unified.append(
+            UnifiedStock(
+                marketplace="wb",
+                fulfillment="fbo",
+                article_seller=row.article_seller,
+                warehouse=row.sklad,
+                quantity=row.stocks_current_day or 0,  # Nullable in source
+                cabinet=row.name_cabinet,
+                id_client=row.id_client,
+                id_cabinet=row.id_cabinet,
+            )
+        )
+
+    for row in fetch_wb_stocks_fbs(client):
+        unified.append(
+            UnifiedStock(
+                marketplace="wb",
+                fulfillment="fbs",
+                article_seller=row.article_seller,
+                warehouse=row.sklad,
+                quantity=row.stocks,
+                cabinet=row.cabinet_name,
+                id_client=row.id_client,
+                id_cabinet=row.id_cabinet,
+            )
+        )
+
+    return unified
 
 
 def fetch_watchdog_freshness(client: Client, limit: int = 100) -> list[WatchdogFreshness]:

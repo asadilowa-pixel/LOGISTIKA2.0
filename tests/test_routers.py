@@ -89,6 +89,56 @@ def test_wb_fbs_endpoint_empty(client_with):
     assert resp.json() == []
 
 
+def test_unified_stocks_endpoint(client_with):
+    ozon_fbo_columns = [
+        "sku", "article_seller", "name_goods", "stocks", "on_way", "reserv",
+        "sklad_name", "name_cabinet", "id_cabinet", "id_client", "update_at",
+    ]
+    ozon_fbo_row = (1, "OZ-FBO", "Товар", 5, 0, 1, "Склад", "Кабинет", 1, 1, UPDATE_AT)
+
+    ozon_fbs_columns = [
+        "sku", "article_seller", "stocks", "reserv", "warehouse_id",
+        "sklad_name", "name_cabinet", "id_cabinet", "id_client", "update_at",
+    ]
+    ozon_fbs_row = (2, "OZ-FBS", 3, 0, 100, "Склад", "Кабинет", 1, 1, UPDATE_AT)
+
+    wb_fbo_columns = [
+        "sklad", "article_seller", "article", "barcode", "stocks_current_day",
+        "to_customer", "from_customer", "stocks_current_day_full", "category",
+        "subject", "brand", "tech_size", "price", "discount", "name_cabinet",
+        "id_client", "id_cabinet",
+    ]
+    wb_fbo_row = (
+        "Склад", "WB-FBO", 3, "barcode", 4, 0, 1, 1, "Категория", "Предмет",
+        "Бренд", "0", 100.0, 10.0, "Кабинет", 1, 1,
+    )
+
+    wb_fbs_columns = [
+        "article", "article_seller", "stocks", "sklad", "barcode", "subject",
+        "brand", "cabinet_name", "id_client", "id_cabinet", "photo", "ssilka",
+        "sebes", "tag", "tag_obj",
+    ]
+    wb_fbs_row = (
+        "WB-FBS", "WB-FBS", 7, "Склад", "barcode", "Предмет", "Бренд",
+        "Кабинет", 1, 1, "photo_url", "link", 50.0, "tag", "tag_obj",
+    )
+
+    client = client_with({
+        "ozon.stocks_fbo": FakeQueryResult(ozon_fbo_columns, [ozon_fbo_row]),
+        "ozon.stocks_fbs": FakeQueryResult(ozon_fbs_columns, [ozon_fbs_row]),
+        "wildberies.stocks_fbo": FakeQueryResult(wb_fbo_columns, [wb_fbo_row]),
+        "wildberies.stocks_fbs": FakeQueryResult(wb_fbs_columns, [wb_fbs_row]),
+    })
+
+    resp = client.get("/stocks/unified")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body) == 4
+    marketplaces = {(item["marketplace"], item["fulfillment"]) for item in body}
+    assert marketplaces == {("ozon", "fbo"), ("ozon", "fbs"), ("wb", "fbo"), ("wb", "fbs")}
+
+
 def test_watchdog_freshness_endpoint(client_with):
     columns = [
         "run_id", "checked_at", "spreadsheet_id", "spreadsheet_name",
