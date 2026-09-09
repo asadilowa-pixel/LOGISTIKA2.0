@@ -2,8 +2,11 @@
 and routers. Uses the same FakeClient/FakeQueryResult as the other test
 modules; see those for the full per-table column layouts."""
 
+import base64
+
 from fastapi.testclient import TestClient
 
+from app.config import settings
 from app.dependencies import get_ch_client
 from app.main import app
 from app.repositories import (
@@ -12,6 +15,15 @@ from app.repositories import (
     fetch_unified_stocks,
 )
 from tests.fake_client import FakeClient, FakeQueryResult
+
+
+def _basic_auth_headers() -> dict[str, str]:
+    """Installed starlette's TestClient has no `auth=` constructor kwarg, so
+    build the Basic Authorization header directly instead."""
+    credentials = base64.b64encode(
+        f"{settings.dashboard_user}:{settings.dashboard_password}".encode()
+    ).decode()
+    return {"Authorization": f"Basic {credentials}"}
 
 OZON_FBO_COLUMNS = [
     "sku", "article_seller", "name_goods", "stocks", "on_way", "reserv",
@@ -80,7 +92,7 @@ def test_fetch_mysklad_supplies_marketplaces_filters_by_both():
 
 def test_unified_endpoint_rejects_invalid_marketplace():
     app.dependency_overrides[get_ch_client] = lambda: FakeClient(FakeQueryResult([], []))
-    client = TestClient(app)
+    client = TestClient(app, headers=_basic_auth_headers())
 
     resp = client.get("/stocks/unified", params={"marketplace": "aliexpress"})
 
@@ -105,7 +117,7 @@ def test_unified_endpoint_accepts_valid_marketplace():
         "wildberies.stocks_fbs": FakeQueryResult(fbs_columns, []),
     })
     app.dependency_overrides[get_ch_client] = lambda: fake
-    client = TestClient(app)
+    client = TestClient(app, headers=_basic_auth_headers())
 
     resp = client.get("/stocks/unified", params={"marketplace": "wb"})
 

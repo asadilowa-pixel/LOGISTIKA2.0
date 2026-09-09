@@ -10,5 +10,8 @@ class Settings(BaseSettings):
     clickhouse_password: str = ""
     clickhouse_database: str = "default"
 
+    dashboard_user: str = "admin"
+    dashboard_password: str = "admin"
+
 
 settings = Settings()
