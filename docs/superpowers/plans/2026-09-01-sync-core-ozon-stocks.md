@@ -1,5 +1,11 @@
 # Sync Core — Ozon «Остатки» Implementation Plan
 
+> **СТАТУС: ОТМЕНЁН / НЕ ИСПОЛНЯЕТСЯ (2026-09-09).** См. ревизию 3 в
+> `docs/superpowers/specs/2026-09-01-sync-core-design.md`: остатки Ozon/WB уже собираются
+> существующей внешней системой в ClickHouse (`ozon.stocks_fbo/fbs`, `wildberies.stocks_fbo/fbs`,
+> `watchdog.freshness/runs`). Собственный файловый ingest-пайплайн (описанный ниже, на
+> PostgreSQL) не строится. Оставлено как историческая справка.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the sync-core backend (FastAPI + PostgreSQL) that ingests Ozon "Остатки" xlsx exports (via watch-folder or manual HTTP upload) into a canonical `stocks` table, with a full sync journal, dedup, and a freshness-status endpoint — no live API calls yet.
