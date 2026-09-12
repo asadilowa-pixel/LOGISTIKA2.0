@@ -1,10 +1,8 @@
-import base64
 import datetime
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.config import settings
 from app.dependencies import get_ch_client
 from app.main import app
 from tests.fake_client import FakeClient, FakeQueryResult
@@ -12,17 +10,8 @@ from tests.fake_client import FakeClient, FakeQueryResult
 UPDATE_AT = datetime.datetime(2026, 9, 9, 12, 0, 0)
 
 
-def _basic_auth_headers() -> dict[str, str]:
-    """Installed starlette's TestClient has no `auth=` constructor kwarg, so
-    build the Basic Authorization header directly instead."""
-    credentials = base64.b64encode(
-        f"{settings.dashboard_user}:{settings.dashboard_password}".encode()
-    ).decode()
-    return {"Authorization": f"Basic {credentials}"}
-
-
 @pytest.fixture()
-def client_with(request):
+def client_with(request, basic_auth_headers):
     """Builds a TestClient with get_ch_client overridden to return a FakeClient
     backed by the given FakeQueryResult. TestClient is instantiated without the
     `with` context manager so the app's real-ClickHouse lifespan never runs."""
@@ -30,7 +19,7 @@ def client_with(request):
     def _make(result: FakeQueryResult) -> TestClient:
         fake = FakeClient(result)
         app.dependency_overrides[get_ch_client] = lambda: fake
-        return TestClient(app, headers=_basic_auth_headers())
+        return TestClient(app, headers=basic_auth_headers)
 
     yield _make
     app.dependency_overrides.clear()

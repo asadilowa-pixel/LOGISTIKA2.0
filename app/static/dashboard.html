@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Сервис логиста 2.0 — Дашборд</title>
+    <link rel="stylesheet" href="/static/dashboard.css">
+</head>
+<body>
+    <h1>Сервис логиста 2.0</h1>
+
+    <section id="filters">
+        <label>Период: с <input type="date" id="date-from"></label>
+        <label>по <input type="date" id="date-to"></label>
+        <label>ID клиента: <input type="number" id="id-client" placeholder="все"></label>
+    </section>
+
+    <section id="stocks-section">
+        <h2>Остатки</h2>
+        <label>Маркетплейс:
+            <select id="stocks-marketplace">
+                <option value="">Все</option>
+                <option value="ozon">Ozon</option>
+                <option value="wb">WB</option>
+            </select>
+        </label>
+        <table>
+            <thead>
+                <tr>
+                    <th>Маркетплейс</th>
+                    <th>Тип</th>
+                    <th>Артикул</th>
+                    <th>Склад</th>
+                    <th>Кол-во</th>
+                    <th>Кабинет</th>
+                </tr>
+            </thead>
+            <tbody id="stocks-body"></tbody>
+        </table>
+    </section>
+
+    <section id="expenses-section">
+        <h2>Расходы на логистику</h2>
+        <div class="cards">
+            <div class="card">
+                <h3>Ozon</h3>
+                <div id="expenses-ozon">—</div>
+            </div>
+            <div class="card">
+                <h3>WB</h3>
+                <div id="expenses-wb">—</div>
+            </div>
+        </div>
+    </section>
+
+    <section id="fbs-section">
+        <h2>Заказы ФБС</h2>
+        <div class="cards">
+            <div class="card">
+                <h3>Ozon</h3>
+                <div id="fbs-ozon">—</div>
+            </div>
+            <div class="card">
+                <h3>WB</h3>
+                <div id="fbs-wb">—</div>
+            </div>
+        </div>
+    </section>
+
+    <script src="/static/dashboard.js"></script>
+</body>
+</html>

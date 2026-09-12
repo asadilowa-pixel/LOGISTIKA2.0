@@ -1,34 +1,22 @@
-import base64
-
 from fastapi.testclient import TestClient
 
-from app.config import settings
 from app.dependencies import get_ch_client
 from app.main import app
 from tests.fake_client import FakeClient, FakeQueryResult
 
 
-def _basic_auth_headers() -> dict[str, str]:
-    """Installed starlette's TestClient has no `auth=` constructor kwarg, so
-    build the Basic Authorization header directly instead."""
-    credentials = base64.b64encode(
-        f"{settings.dashboard_user}:{settings.dashboard_password}".encode()
-    ).decode()
-    return {"Authorization": f"Basic {credentials}"}
-
-
-def _authed_client(fake: FakeClient) -> TestClient:
+def _authed_client(fake: FakeClient, basic_auth_headers: dict[str, str]) -> TestClient:
     app.dependency_overrides[get_ch_client] = lambda: fake
-    return TestClient(app, headers=_basic_auth_headers())
+    return TestClient(app, headers=basic_auth_headers)
 
 
-def test_expenses_logistics_endpoint_returns_ozon_and_null_wb():
+def test_expenses_logistics_endpoint_returns_ozon_and_null_wb(basic_auth_headers):
     fake = FakeClient([
         FakeQueryResult([], [(5,)]),
         FakeQueryResult([], [(100.0, 10.0, 20.0, 1.0)]),
         FakeQueryResult([], [(0,)]),
     ])
-    client = _authed_client(fake)
+    client = _authed_client(fake, basic_auth_headers)
 
     resp = client.get(
         "/expenses/logistics", params={"date_from": "2026-08-01", "date_to": "2026-08-31"}
@@ -41,8 +29,8 @@ def test_expenses_logistics_endpoint_returns_ozon_and_null_wb():
     assert body["wb"] is None
 
 
-def test_expenses_logistics_rejects_inverted_date_range():
-    client = _authed_client(FakeClient([]))
+def test_expenses_logistics_rejects_inverted_date_range(basic_auth_headers):
+    client = _authed_client(FakeClient([]), basic_auth_headers)
 
     resp = client.get(
         "/expenses/logistics", params={"date_from": "2026-08-31", "date_to": "2026-08-01"}
@@ -52,8 +40,8 @@ def test_expenses_logistics_rejects_inverted_date_range():
     assert resp.status_code == 400
 
 
-def test_expenses_logistics_requires_date_params():
-    client = _authed_client(FakeClient([]))
+def test_expenses_logistics_requires_date_params(basic_auth_headers):
+    client = _authed_client(FakeClient([]), basic_auth_headers)
 
     resp = client.get("/expenses/logistics")
 
@@ -61,12 +49,12 @@ def test_expenses_logistics_requires_date_params():
     assert resp.status_code == 422
 
 
-def test_orders_fbs_count_endpoint():
+def test_orders_fbs_count_endpoint(basic_auth_headers):
     fake = FakeClient([
         FakeQueryResult([], [(12,)]),
         FakeQueryResult([], [(7,)]),
     ])
-    client = _authed_client(fake)
+    client = _authed_client(fake, basic_auth_headers)
 
     resp = client.get(
         "/orders/fbs-count", params={"date_from": "2026-08-01", "date_to": "2026-08-31"}
@@ -79,8 +67,8 @@ def test_orders_fbs_count_endpoint():
     assert body["wb"] == 7
 
 
-def test_orders_fbs_count_rejects_inverted_date_range():
-    client = _authed_client(FakeClient([]))
+def test_orders_fbs_count_rejects_inverted_date_range(basic_auth_headers):
+    client = _authed_client(FakeClient([]), basic_auth_headers)
 
     resp = client.get(
         "/orders/fbs-count", params={"date_from": "2026-08-31", "date_to": "2026-08-01"}

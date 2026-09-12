@@ -67,3 +67,24 @@ def test_malformed_authorization_header_returns_401(monkeypatch):
     resp = client.get("/ping", headers={"Authorization": "Bearer not-basic-auth"})
 
     assert resp.status_code == 401
+
+
+def test_dashboard_page_requires_auth():
+    from app.main import app as real_app
+
+    client = TestClient(real_app)
+
+    resp = client.get("/")
+
+    assert resp.status_code == 401
+
+
+def test_dashboard_page_served_with_auth(basic_auth_headers):
+    from app.main import app as real_app
+
+    client = TestClient(real_app, headers=basic_auth_headers)
+
+    resp = client.get("/")
+
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers["content-type"]
