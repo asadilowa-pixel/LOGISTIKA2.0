@@ -87,15 +87,12 @@ def record_alert(
     alert_type: str,
     now: str,
 ) -> bool:
-    try:
-        conn.execute(
-            """
-            INSERT INTO alert_log (marketplace, cabinet_id, order_key, alert_type, sent_at)
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            (marketplace, cabinet_id, order_key, alert_type, now),
-        )
-        conn.commit()
-        return True
-    except sqlite3.IntegrityError:
-        return False
+    cursor = conn.execute(
+        """
+        INSERT OR IGNORE INTO alert_log (marketplace, cabinet_id, order_key, alert_type, sent_at)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (marketplace, cabinet_id, order_key, alert_type, now),
+    )
+    conn.commit()
+    return cursor.rowcount == 1
