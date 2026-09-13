@@ -98,6 +98,8 @@ async def run_forever(context: BotContext) -> None:
                     context.max_client.send_message(chat_id, reply)
 
             def on_callback(chat_id, callback_id, payload):
+                if chat_id != context.chat_id:
+                    return
                 context.max_client.answer_callback(callback_id, text="Принято")
 
             marker = poll_once(
