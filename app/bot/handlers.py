@@ -1,5 +1,7 @@
 import datetime
+import sqlite3
 
+from app.bot import state
 from app.bot.fbs_status import (
     format_status_message,
     ozon_order_deadlines,
@@ -46,3 +48,16 @@ def handle_status_command(
         snapshots.append(summarize(marketplace, cabinet_id, deadlines, pending_count=len(raw_items)))
 
     max_client.send_message(chat_id, format_status_message(snapshots, now))
+
+
+def handle_cancel_command(conn: sqlite3.Connection, *, chat_id: int, args: list[str], now: str) -> str:
+    if not args or not args[0].isdigit():
+        return "Использование: /cancel <номер наблюдения>"
+    watch_id = int(args[0])
+    matching = [
+        row for row in state.list_watch_requests(conn, status="watching") if row["id"] == watch_id
+    ]
+    if not matching:
+        return f"Наблюдение {watch_id} не найдено среди активных"
+    state.update_watch_status(conn, watch_id, "cancelled", now=now)
+    return f"Наблюдение {watch_id} отменено"
