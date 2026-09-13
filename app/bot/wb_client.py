@@ -15,3 +15,21 @@ class WbClient:
         resp = self._client.get("/api/v3/orders/new")
         resp.raise_for_status()
         return resp.json()["orders"]
+
+    def list_warehouses(self) -> list[dict]:
+        resp = self._client.get("/api/v1/warehouses")
+        resp.raise_for_status()
+        return resp.json()
+
+    def get_acceptance_coefficients(self, warehouse_ids: list[int]) -> list[dict]:
+        resp = self._client.get(
+            "/api/v1/acceptance/coefficients",
+            params={"warehouseIDs": ",".join(str(w) for w in warehouse_ids)},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def list_supplies(self, status_ids: list[int]) -> list[dict]:
+        resp = self._client.post("/api/v1/supplies", json={"statusIDs": status_ids})
+        resp.raise_for_status()
+        return resp.json()
