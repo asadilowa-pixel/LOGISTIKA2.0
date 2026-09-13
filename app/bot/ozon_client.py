@@ -34,3 +34,47 @@ class OzonClient:
                 break
             offset += limit
         return postings
+
+    def create_draft(self, items: list[dict], warehouse_ids: list[int]) -> str:
+        resp = self._client.post(
+            "/v1/draft/create",
+            json={"items": items, "drop_off_point_warehouse_id": warehouse_ids[0]},
+        )
+        resp.raise_for_status()
+        return resp.json()["operation_id"]
+
+    def get_draft_id(self, operation_id: str) -> str | None:
+        resp = self._client.post("/v1/draft/create/info", json={"operation_id": operation_id})
+        resp.raise_for_status()
+        body = resp.json()
+        if body.get("status") != "CALCULATION_STATUS_SUCCESS":
+            return None
+        return body["draft_id"]
+
+    def get_draft_timeslots(self, draft_id: str, date_from: str, date_to: str) -> list[dict]:
+        resp = self._client.post(
+            "/v2/draft/timeslot/info",
+            json={"draft_id": draft_id, "date_from": date_from, "date_to": date_to},
+        )
+        resp.raise_for_status()
+        body = resp.json()
+        slots = []
+        for warehouse in body.get("drop_off_warehouse_timeslots", []):
+            for day in warehouse.get("days", []):
+                for timeslot in day.get("timeslots", []):
+                    slots.append(
+                        {
+                            "warehouse_id": warehouse["warehouse_id"],
+                            "date": day["date"],
+                            "coefficient": timeslot["coefficient"],
+                            "timeslot": timeslot,
+                        }
+                    )
+        return slots
+
+    def book_draft_timeslot(self, draft_id: str, timeslot: dict) -> dict:
+        resp = self._client.post(
+            "/v1/draft/supply/create", json={"draft_id": draft_id, "timeslot": timeslot}
+        )
+        resp.raise_for_status()
+        return resp.json()
