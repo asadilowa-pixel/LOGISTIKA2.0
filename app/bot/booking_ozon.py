@@ -52,7 +52,7 @@ def start_draft_booking(
         marketplace="ozon",
         cabinet_id=cabinet_id,
         kind="ozon_draft_create",
-        reference_json=json.dumps({"draft_id": draft_id}),
+        reference_json=json.dumps({"draft_id": draft_id, "operation_id": operation_id}),
         date_from=date_from,
         date_to=date_to,
         max_coefficient=0,
@@ -68,7 +68,14 @@ def start_draft_booking(
 
 def poll_draft_watch(ozon_client, conn: sqlite3.Connection, watch_row, now: str) -> str | None:
     reference = json.loads(watch_row["reference_json"])
-    draft_id = reference["draft_id"]
+    draft_id = reference.get("draft_id")
+    if draft_id is None:
+        operation_id = reference.get("operation_id")
+        if operation_id is None:
+            return None
+        draft_id = ozon_client.get_draft_id(operation_id)
+        if draft_id is None:
+            return None
 
     timeslots = ozon_client.get_draft_timeslots(
         draft_id, watch_row["date_from"], watch_row["date_to"]
