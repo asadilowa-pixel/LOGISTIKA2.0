@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -5,6 +6,8 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.auth import BasicAuthMiddleware
+from app.bot.runner import build_context, run_forever
+from app.config import settings
 from app.db import get_client
 from app.routers.dashboard import router as dashboard_router
 from app.routers.mysklad import router as mysklad_router
@@ -17,7 +20,16 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.ch_client = get_client()
+
+    bot_task = None
+    if settings.max_bot_token:
+        bot_context = build_context(settings)
+        bot_task = asyncio.create_task(run_forever(bot_context))
+
     yield
+
+    if bot_task is not None:
+        bot_task.cancel()
     app.state.ch_client.close()
 
 
