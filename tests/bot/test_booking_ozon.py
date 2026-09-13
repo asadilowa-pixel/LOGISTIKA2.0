@@ -1,7 +1,11 @@
 import json
 
 from app.bot import state
-from app.bot.booking_ozon import poll_draft_watch, start_draft_booking
+from app.bot.booking_ozon import (
+    poll_draft_watch,
+    start_draft_booking,
+    start_existing_draft_watch,
+)
 
 
 class _FakeOzonClient:
@@ -167,6 +171,36 @@ def test_start_draft_booking_watches_when_draft_still_processing_then_poll_resol
     assert ozon.booked == [("draft-1", {})]
     assert state.list_watch_requests(conn, status="watching") == []
     assert state.list_watch_requests(conn, status="booked")[0]["id"] == rows[0]["id"]
+
+
+def test_start_existing_draft_watch_books_free_slot_immediately():
+    ozon = _FakeOzonClient(
+        timeslots=[{"warehouse_id": 507, "date": "2026-09-20", "coefficient": 0, "timeslot": {}}]
+    )
+    conn = state.connect(":memory:")
+
+    result = start_existing_draft_watch(
+        ozon, conn, cabinet_id=1, draft_id="draft-existing", date_from="2026-09-20",
+        date_to="2026-09-25", chat_id=555, now="2026-09-13T10:00:00",
+    )
+
+    assert result["outcome"] == "booked"
+    assert ozon.booked == [("draft-existing", {})]
+
+
+def test_start_existing_draft_watch_registers_watch_when_no_slots():
+    ozon = _FakeOzonClient(timeslots=[])
+    conn = state.connect(":memory:")
+
+    result = start_existing_draft_watch(
+        ozon, conn, cabinet_id=1, draft_id="draft-existing", date_from="2026-09-20",
+        date_to="2026-09-25", chat_id=555, now="2026-09-13T10:00:00",
+    )
+
+    assert result["outcome"] == "watching"
+    rows = state.list_watch_requests(conn, status="watching")
+    assert json.loads(rows[0]["reference_json"])["draft_id"] == "draft-existing"
+    assert rows[0]["kind"] == "ozon_draft_select"
 
 
 def test_poll_draft_watch_returns_none_when_draft_still_processing():

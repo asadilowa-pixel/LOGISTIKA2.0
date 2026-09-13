@@ -14,20 +14,19 @@ def _cheapest_paid_slot(timeslots: list[dict]) -> dict | None:
     return min(paid, key=lambda t: t["coefficient"]) if paid else None
 
 
-def start_draft_booking(
+def _resolve_draft_booking(
     ozon_client,
     conn: sqlite3.Connection,
     *,
     cabinet_id: int,
-    items: list[dict],
-    warehouse_ids: list[int],
+    kind: str,
+    draft_id: str | None,
     date_from: str,
     date_to: str,
     chat_id: int,
     now: str,
+    operation_id: str | None = None,
 ) -> dict:
-    operation_id = ozon_client.create_draft(items, warehouse_ids)
-    draft_id = ozon_client.get_draft_id(operation_id)
     timeslots = ozon_client.get_draft_timeslots(draft_id, date_from, date_to) if draft_id else []
 
     free_slot = _pick_free_slot(timeslots, max_coefficient=0)
@@ -51,7 +50,7 @@ def start_draft_booking(
         conn,
         marketplace="ozon",
         cabinet_id=cabinet_id,
-        kind="ozon_draft_create",
+        kind=kind,
         reference_json=json.dumps({"draft_id": draft_id, "operation_id": operation_id}),
         date_from=date_from,
         date_to=date_to,
@@ -64,6 +63,43 @@ def start_draft_booking(
         "message": "Свободных слотов пока нет, продолжаю наблюдение",
         "watch_id": watch_id,
     }
+
+
+def start_draft_booking(
+    ozon_client,
+    conn: sqlite3.Connection,
+    *,
+    cabinet_id: int,
+    items: list[dict],
+    warehouse_ids: list[int],
+    date_from: str,
+    date_to: str,
+    chat_id: int,
+    now: str,
+) -> dict:
+    operation_id = ozon_client.create_draft(items, warehouse_ids)
+    draft_id = ozon_client.get_draft_id(operation_id)
+    return _resolve_draft_booking(
+        ozon_client, conn, cabinet_id=cabinet_id, kind="ozon_draft_create", draft_id=draft_id,
+        date_from=date_from, date_to=date_to, chat_id=chat_id, now=now, operation_id=operation_id,
+    )
+
+
+def start_existing_draft_watch(
+    ozon_client,
+    conn: sqlite3.Connection,
+    *,
+    cabinet_id: int,
+    draft_id: str,
+    date_from: str,
+    date_to: str,
+    chat_id: int,
+    now: str,
+) -> dict:
+    return _resolve_draft_booking(
+        ozon_client, conn, cabinet_id=cabinet_id, kind="ozon_draft_select", draft_id=draft_id,
+        date_from=date_from, date_to=date_to, chat_id=chat_id, now=now,
+    )
 
 
 def poll_draft_watch(ozon_client, conn: sqlite3.Connection, watch_row, now: str) -> str | None:
