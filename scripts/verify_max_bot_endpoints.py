@@ -8,6 +8,9 @@ Reads OZON_CABINET_1_* and WB_CABINET_1_* from .env via app.config.settings-styl
 
 import json
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.bot.cabinets import load_ozon_cabinets, load_wb_cabinets
 from app.bot.ozon_client import OzonClient
