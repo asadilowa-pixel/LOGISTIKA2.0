@@ -7,5 +7,6 @@ venv/
 *.egg-info/
 .omc/
 .superpowers/
+bot_state.db
 sublime-triode-422515-k3-c3f653d7b73f.json
 токены .txt

@@ -80,7 +80,7 @@ def test_sweep_expired_watches_leaves_active_ones():
     assert len(state.list_watch_requests(conn, status="watching")) == 1
 
 
-class _RecordingMaxClient:
+class _RecordingTelegramClient:
     def __init__(self):
         self.sent = []
 
@@ -95,7 +95,7 @@ def test_build_scheduler_registers_both_jobs():
         ozon_clients={},
         wb_clients={},
         conn=conn,
-        max_client=_RecordingMaxClient(),
+        telegram_client=_RecordingTelegramClient(),
         chat_id=555,
         watch_poll_seconds=90,
         fbs_poll_minutes=15,

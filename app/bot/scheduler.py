@@ -48,7 +48,7 @@ def build_scheduler(
     ozon_clients: dict[int, object],
     wb_clients: dict[int, object],
     conn: sqlite3.Connection,
-    max_client,
+    telegram_client,
     chat_id: int,
     watch_poll_seconds: int,
     fbs_poll_minutes: int,
@@ -63,7 +63,7 @@ def build_scheduler(
         messages = poll_all_watches(ozon_clients, wb_clients, conn, now_fn().isoformat(), cooldown_minutes)
         messages.extend(f"Наблюдение истекло: watch {wid}" for wid in sweep_expired_watches(conn, now_fn().isoformat()))
         for message in messages:
-            max_client.send_message(chat_id, message)
+            telegram_client.send_message(chat_id, message)
 
     def _check_fbs_job():
         now = datetime.datetime.now(datetime.timezone.utc)
@@ -81,7 +81,7 @@ def build_scheduler(
                 now=now, threshold_hours=alert_hours_before_deadline,
             ))
         for message in messages:
-            max_client.send_message(chat_id, message)
+            telegram_client.send_message(chat_id, message)
 
     scheduler.add_job(_poll_watches_job, "interval", seconds=watch_poll_seconds, id="poll_watches")
     scheduler.add_job(_check_fbs_job, "interval", minutes=fbs_poll_minutes, id="check_fbs_deadlines")

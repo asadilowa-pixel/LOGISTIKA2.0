@@ -11,28 +11,26 @@ from app.bot.fbs_status import (
 
 
 def parse_update(update: dict) -> dict | None:
-    update_type = update.get("update_type")
-
-    if update_type == "message_created":
+    if "message" in update:
         message = update["message"]
-        text = ((message.get("body") or {}).get("text") or "").strip()
-        return {"kind": "command", "chat_id": message["recipient"]["chat_id"], "text": text}
+        text = (message.get("text") or "").strip()
+        return {"kind": "command", "chat_id": message["chat"]["id"], "text": text}
 
-    if update_type == "message_callback":
-        callback = update["callback"]
-        message = update.get("message") or {}
+    if "callback_query" in update:
+        callback = update["callback_query"]
+        message = callback.get("message") or {}
         return {
             "kind": "callback",
-            "chat_id": (message.get("recipient") or {}).get("chat_id"),
-            "callback_id": callback["callback_id"],
-            "payload": callback.get("payload", ""),
+            "chat_id": (message.get("chat") or {}).get("id"),
+            "callback_id": callback["id"],
+            "payload": callback.get("data", ""),
         }
 
     return None
 
 
 def handle_status_command(
-    max_client,
+    telegram_client,
     *,
     chat_id: int,
     cabinets_data: list[tuple[str, int, list[dict]]],
@@ -47,7 +45,7 @@ def handle_status_command(
             deadlines = wb_order_deadlines(raw_items, assembly_hours=wb_assembly_hours)
         snapshots.append(summarize(marketplace, cabinet_id, deadlines, pending_count=len(raw_items)))
 
-    max_client.send_message(chat_id, format_status_message(snapshots, now))
+    telegram_client.send_message(chat_id, format_status_message(snapshots, now))
 
 
 def handle_cancel_command(conn: sqlite3.Connection, *, chat_id: int, args: list[str], now: str) -> str:

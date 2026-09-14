@@ -2,6 +2,10 @@ import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
@@ -22,7 +26,7 @@ async def lifespan(app: FastAPI):
     app.state.ch_client = get_client()
 
     bot_task = None
-    if settings.max_bot_token:
+    if settings.telegram_bot_token:
         bot_context = build_context(settings)
         bot_task = asyncio.create_task(run_forever(bot_context))
 
