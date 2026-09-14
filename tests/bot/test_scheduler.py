@@ -96,7 +96,7 @@ def test_build_scheduler_registers_both_jobs():
         wb_clients={},
         conn=conn,
         telegram_client=_RecordingTelegramClient(),
-        chat_id=555,
+        chat_ids={555},
         watch_poll_seconds=90,
         fbs_poll_minutes=15,
         cooldown_minutes=60,
@@ -106,3 +106,36 @@ def test_build_scheduler_registers_both_jobs():
     )
 
     assert {job.id for job in scheduler.get_jobs()} == {"poll_watches", "check_fbs_deadlines"}
+
+
+def test_poll_watches_job_broadcasts_to_all_allowed_chat_ids():
+    conn = state.connect(":memory:")
+    state.create_watch_request(
+        conn, marketplace="ozon", cabinet_id=1, kind="ozon_draft_create",
+        reference_json=json.dumps({"draft_id": "draft-1"}), date_from="2026-09-20",
+        date_to="2026-09-25", max_coefficient=0, requested_by_chat_id=555,
+        now="2026-09-13T10:00:00",
+    )
+    ozon_clients = {1: _FakeOzonClient(
+        [{"warehouse_id": 507, "date": "2026-09-20", "coefficient": 0, "timeslot": {}}]
+    )}
+    telegram_client = _RecordingTelegramClient()
+
+    scheduler = build_scheduler(
+        ozon_clients=ozon_clients,
+        wb_clients={},
+        conn=conn,
+        telegram_client=telegram_client,
+        chat_ids={555, 777},
+        watch_poll_seconds=90,
+        fbs_poll_minutes=15,
+        cooldown_minutes=60,
+        now_fn=lambda: datetime.datetime(2026, 9, 13, 10, 5, 0),
+        alert_hours_before_deadline=4.0,
+        wb_assembly_hours=48.0,
+    )
+    job = next(j for j in scheduler.get_jobs() if j.id == "poll_watches")
+
+    job.func()
+
+    assert {chat_id for chat_id, _ in telegram_client.sent} == {555, 777}

@@ -1,7 +1,13 @@
 import datetime
 
 from app.bot import state
-from app.bot.handlers import handle_cancel_command, handle_status_command, parse_update
+from app.bot.handlers import (
+    handle_cancel_command,
+    handle_cancel_list_callback,
+    handle_menu_command,
+    handle_status_command,
+    parse_update,
+)
 
 
 def test_parse_update_extracts_command_from_message():
@@ -35,7 +41,7 @@ class _RecordingTelegramClient:
         self.sent = []
 
     def send_message(self, chat_id, text, buttons=None):
-        self.sent.append((chat_id, text))
+        self.sent.append((chat_id, text, buttons))
 
 
 def test_handle_status_command_sends_summary_for_each_cabinet():
@@ -49,7 +55,7 @@ def test_handle_status_command_sends_summary_for_each_cabinet():
     handle_status_command(telegram_client, chat_id=555, cabinets_data=cabinets_data, now=now)
 
     assert len(telegram_client.sent) == 1
-    chat_id, text = telegram_client.sent[0]
+    chat_id, text, _buttons = telegram_client.sent[0]
     assert chat_id == 555
     assert "ozon (кабинет 1)" in text
     assert "wb (кабинет 2): нет заказов к отгрузке" in text
@@ -75,3 +81,45 @@ def test_handle_cancel_command_reports_unknown_watch():
     reply = handle_cancel_command(conn, chat_id=555, args=["999"], now="2026-09-13T10:10:00")
 
     assert "не найдено" in reply
+
+
+def test_handle_menu_command_sends_menu_buttons():
+    telegram_client = _RecordingTelegramClient()
+
+    handle_menu_command(telegram_client, chat_id=555)
+
+    assert len(telegram_client.sent) == 1
+    chat_id, _text, buttons = telegram_client.sent[0]
+    assert chat_id == 555
+    callback_data = [button["callback_data"] for row in buttons for button in row]
+    assert callback_data == ["menu:status", "menu:cancel_list"]
+
+
+def test_handle_cancel_list_callback_lists_active_watches():
+    conn = state.connect(":memory:")
+    watch_id = state.create_watch_request(
+        conn, marketplace="ozon", cabinet_id=1, kind="ozon_draft_create",
+        reference_json="{}", date_from="2026-09-20", date_to="2026-09-25",
+        max_coefficient=0, requested_by_chat_id=555, now="2026-09-13T10:00:00",
+    )
+    telegram_client = _RecordingTelegramClient()
+
+    handle_cancel_list_callback(telegram_client, conn, chat_id=555)
+
+    assert len(telegram_client.sent) == 1
+    chat_id, text, buttons = telegram_client.sent[0]
+    assert chat_id == 555
+    assert buttons == [[{"text": f"#{watch_id} ozon кабинет 1 (2026-09-20 — 2026-09-25)",
+                          "callback_data": f"cancel:{watch_id}"}]]
+
+
+def test_handle_cancel_list_callback_reports_when_empty():
+    conn = state.connect(":memory:")
+    telegram_client = _RecordingTelegramClient()
+
+    handle_cancel_list_callback(telegram_client, conn, chat_id=555)
+
+    assert len(telegram_client.sent) == 1
+    chat_id, text, buttons = telegram_client.sent[0]
+    assert "нет" in text.lower()
+    assert buttons is None

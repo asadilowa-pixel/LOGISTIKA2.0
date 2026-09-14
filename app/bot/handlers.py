@@ -59,3 +59,29 @@ def handle_cancel_command(conn: sqlite3.Connection, *, chat_id: int, args: list[
         return f"Наблюдение {watch_id} не найдено среди активных"
     state.update_watch_status(conn, watch_id, "cancelled", now=now)
     return f"Наблюдение {watch_id} отменено"
+
+
+MAIN_MENU_BUTTONS = [
+    [{"text": "📊 Статус", "callback_data": "menu:status"}],
+    [{"text": "❌ Отменить наблюдение", "callback_data": "menu:cancel_list"}],
+]
+
+
+def handle_menu_command(telegram_client, *, chat_id: int) -> None:
+    telegram_client.send_message(chat_id, "Выберите действие:", buttons=MAIN_MENU_BUTTONS)
+
+
+def handle_cancel_list_callback(telegram_client, conn: sqlite3.Connection, *, chat_id: int) -> None:
+    watches = state.list_watch_requests(conn, status="watching")
+    if not watches:
+        telegram_client.send_message(chat_id, "Нет активных наблюдений")
+        return
+    buttons = [
+        [{
+            "text": f"#{row['id']} {row['marketplace']} кабинет {row['cabinet_id']} "
+                    f"({row['date_from']} — {row['date_to']})",
+            "callback_data": f"cancel:{row['id']}",
+        }]
+        for row in watches
+    ]
+    telegram_client.send_message(chat_id, "Выберите наблюдение для отмены:", buttons=buttons)

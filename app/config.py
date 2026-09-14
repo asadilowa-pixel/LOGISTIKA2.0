@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     dashboard_password: str = "admin"
 
     telegram_bot_token: str = ""
-    telegram_chat_id: int = 0
+    telegram_allowed_chat_ids: str = ""
     alert_hours_before_deadline: float = 4.0
     fbs_poll_interval_minutes: int = 15
     wb_assembly_hours: float = 48.0

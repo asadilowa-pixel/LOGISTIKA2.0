@@ -1,9 +1,18 @@
 import asyncio
 import datetime
+import logging
 from dataclasses import dataclass
 from typing import Callable
 
-from app.bot.handlers import parse_update
+logger = logging.getLogger(__name__)
+
+from app.bot.handlers import (
+    handle_cancel_command,
+    handle_cancel_list_callback,
+    handle_menu_command,
+    handle_status_command,
+    parse_update,
+)
 from app.bot.telegram_client import TelegramClient
 
 
@@ -34,8 +43,57 @@ class BotContext:
     conn: object
     ozon_clients: dict
     wb_clients: dict
-    chat_id: int
+    allowed_chat_ids: set[int]
     scheduler: object
+
+
+def _send_status(context: BotContext, chat_id: int) -> None:
+    cabinets_data = [
+        ("ozon", cid, client.list_unfulfilled_postings())
+        for cid, client in context.ozon_clients.items()
+    ] + [
+        ("wb", cid, client.list_new_orders())
+        for cid, client in context.wb_clients.items()
+    ]
+    handle_status_command(
+        context.telegram_client, chat_id=chat_id, cabinets_data=cabinets_data,
+        now=datetime.datetime.now(datetime.timezone.utc),
+    )
+
+
+def dispatch_command(context: BotContext, chat_id: int, text: str) -> None:
+    if chat_id not in context.allowed_chat_ids:
+        return
+    if text == "/status":
+        _send_status(context, chat_id)
+    elif text in ("/start", "/menu"):
+        handle_menu_command(context.telegram_client, chat_id=chat_id)
+    elif text.startswith("/cancel"):
+        reply = handle_cancel_command(
+            context.conn, chat_id=chat_id, args=text.split()[1:],
+            now=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        )
+        context.telegram_client.send_message(chat_id, reply)
+
+
+def dispatch_callback(context: BotContext, chat_id: int | None, callback_id: str, payload: str) -> None:
+    if chat_id not in context.allowed_chat_ids:
+        return
+    if payload == "menu:status":
+        _send_status(context, chat_id)
+        context.telegram_client.answer_callback(callback_id)
+    elif payload == "menu:cancel_list":
+        handle_cancel_list_callback(context.telegram_client, context.conn, chat_id=chat_id)
+        context.telegram_client.answer_callback(callback_id)
+    elif payload.startswith("cancel:"):
+        watch_id = payload.split(":", 1)[1]
+        reply = handle_cancel_command(
+            context.conn, chat_id=chat_id, args=[watch_id],
+            now=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        )
+        context.telegram_client.answer_callback(callback_id, text=reply)
+    else:
+        context.telegram_client.answer_callback(callback_id)
 
 
 def build_context(settings) -> BotContext:
@@ -52,12 +110,17 @@ def build_context(settings) -> BotContext:
         for c in load_ozon_cabinets()
     }
     wb_clients = {c.cabinet_id: WbClient(token=c.token) for c in load_wb_cabinets()}
+    allowed_chat_ids = {
+        int(cid.strip())
+        for cid in settings.telegram_allowed_chat_ids.split(",")
+        if cid.strip()
+    }
     scheduler = build_scheduler(
         ozon_clients=ozon_clients,
         wb_clients=wb_clients,
         conn=conn,
         telegram_client=telegram_client,
-        chat_id=settings.telegram_chat_id,
+        chat_ids=allowed_chat_ids,
         watch_poll_seconds=settings.ozon_watch_poll_interval_seconds,
         fbs_poll_minutes=settings.fbs_poll_interval_minutes,
         cooldown_minutes=settings.wb_coefficient_alert_cooldown_minutes,
@@ -67,47 +130,24 @@ def build_context(settings) -> BotContext:
     )
     return BotContext(
         telegram_client=telegram_client, conn=conn, ozon_clients=ozon_clients,
-        wb_clients=wb_clients, chat_id=settings.telegram_chat_id, scheduler=scheduler,
+        wb_clients=wb_clients, allowed_chat_ids=allowed_chat_ids, scheduler=scheduler,
     )
 
 
 async def run_forever(context: BotContext) -> None:
-    from app.bot.handlers import handle_cancel_command, handle_status_command
-
     context.scheduler.start()
     offset = None
     try:
         while True:
-            def on_command(chat_id, text):
-                if chat_id != context.chat_id:
-                    return
-                if text == "/status":
-                    cabinets_data = [
-                        ("ozon", cid, client.list_unfulfilled_postings())
-                        for cid, client in context.ozon_clients.items()
-                    ] + [
-                        ("wb", cid, client.list_new_orders())
-                        for cid, client in context.wb_clients.items()
-                    ]
-                    handle_status_command(
-                        context.telegram_client, chat_id=chat_id, cabinets_data=cabinets_data,
-                        now=datetime.datetime.now(datetime.timezone.utc),
-                    )
-                elif text.startswith("/cancel"):
-                    reply = handle_cancel_command(
-                        context.conn, chat_id=chat_id, args=text.split()[1:],
-                        now=datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                    )
-                    context.telegram_client.send_message(chat_id, reply)
-
-            def on_callback(chat_id, callback_id, payload):
-                if chat_id != context.chat_id:
-                    return
-                context.telegram_client.answer_callback(callback_id, text="Принято")
-
-            offset = await asyncio.to_thread(
-                poll_once, context.telegram_client, offset=offset,
-                on_command=on_command, on_callback=on_callback,
-            )
+            try:
+                offset = await asyncio.to_thread(
+                    poll_once, context.telegram_client, offset=offset,
+                    on_command=lambda chat_id, text: dispatch_command(context, chat_id, text),
+                    on_callback=lambda chat_id, cb_id, payload: dispatch_callback(
+                        context, chat_id, cb_id, payload
+                    ),
+                )
+            except Exception:
+                logger.exception("Bot polling iteration failed; continuing")
     finally:
         context.scheduler.shutdown(wait=False)

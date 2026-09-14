@@ -1,4 +1,23 @@
+import threading
+
 from app.bot import state
+
+
+def test_connect_allows_use_from_a_different_thread():
+    conn = state.connect(":memory:")
+    errors = []
+
+    def use_from_other_thread():
+        try:
+            state.list_watch_requests(conn, status="watching")
+        except Exception as exc:  # noqa: BLE001 - capturing for the assertion below
+            errors.append(exc)
+
+    thread = threading.Thread(target=use_from_other_thread)
+    thread.start()
+    thread.join()
+
+    assert errors == []
 
 
 def test_create_and_list_watch_requests():
