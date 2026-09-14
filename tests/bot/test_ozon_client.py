@@ -1,3 +1,5 @@
+import json
+
 import httpx
 
 from app.bot.ozon_client import OzonClient
@@ -21,6 +23,23 @@ def test_list_unfulfilled_postings_single_page():
     postings = client.list_unfulfilled_postings()
 
     assert postings == [{"posting_number": "P-1"}]
+
+
+def test_list_unfulfilled_postings_sends_cutoff_date_range():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["body"] = json.loads(request.read())
+        return httpx.Response(200, json={"result": {"postings": [], "has_next": False}})
+
+    client = OzonClient(client_id="111", api_key="key-1", client=_client_with(handler))
+
+    client.list_unfulfilled_postings()
+
+    filter_ = seen["body"]["filter"]
+    assert filter_["cutoff_from"]
+    assert filter_["cutoff_to"]
+    assert filter_["cutoff_from"] < filter_["cutoff_to"]
 
 
 def test_list_unfulfilled_postings_paginates():

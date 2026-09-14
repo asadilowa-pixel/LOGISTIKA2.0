@@ -1,3 +1,5 @@
+import datetime
+
 import httpx
 
 BASE_URL = "https://api-seller.ozon.ru"
@@ -14,6 +16,10 @@ class OzonClient:
         self._client.headers["Api-Key"] = api_key
 
     def list_unfulfilled_postings(self, limit: int = 1000) -> list[dict]:
+        now = datetime.datetime.now(datetime.timezone.utc)
+        cutoff_from = (now - datetime.timedelta(days=60)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        cutoff_to = (now + datetime.timedelta(days=60)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
         postings: list[dict] = []
         offset = 0
         while True:
@@ -21,7 +27,7 @@ class OzonClient:
                 "/v3/posting/fbs/unfulfilled/list",
                 json={
                     "dir": "asc",
-                    "filter": {},
+                    "filter": {"cutoff_from": cutoff_from, "cutoff_to": cutoff_to},
                     "limit": limit,
                     "offset": offset,
                     "with": {"analytics_data": False},
