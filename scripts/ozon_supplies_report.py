@@ -17,6 +17,7 @@ Usage:
 """
 
 import argparse
+import concurrent.futures
 import csv
 import datetime
 import json
@@ -76,6 +77,7 @@ class OzonApi:
             "Content-Type": "application/json",
         }
         self.raw: list[dict] = []
+        self._bundle_cache: dict[str, list[dict]] = {}
 
     def post(self, path: str, body: dict, retries: int = 5) -> dict:
         data = json.dumps(body).encode()
@@ -129,7 +131,19 @@ class OzonApi:
                 cargoes[supply["supply_id"]] = supply.get("cargoes") or []
         return cargoes
 
+    def prefetch_bundles(self, bundle_ids: list[str], workers: int = 8) -> None:
+        """Параллельно загружает составы — по одному их ~0.7с на запрос, а грузомест тысячи."""
+        todo = [b for b in dict.fromkeys(bundle_ids) if b not in self._bundle_cache]
+        with concurrent.futures.ThreadPoolExecutor(workers) as pool:
+            for bundle_id, items in zip(todo, pool.map(self._fetch_bundle_items, todo)):
+                self._bundle_cache[bundle_id] = items
+
     def get_bundle_items(self, bundle_id: str) -> list[dict]:
+        if bundle_id not in self._bundle_cache:
+            self._bundle_cache[bundle_id] = self._fetch_bundle_items(bundle_id)
+        return self._bundle_cache[bundle_id]
+
+    def _fetch_bundle_items(self, bundle_id: str) -> list[dict]:
         items: list[dict] = []
         last_id = ""
         while True:
@@ -192,6 +206,10 @@ def build_rows(
         if supply.get("supply_id")
     ]
     cargoes = api.get_cargoes(supply_ids)
+    api.prefetch_bundles(
+        [s["bundle_id"] for o, _ in in_period for s in o.get("supplies") or [] if s.get("bundle_id")]
+        + [c["bundle_id"] for cs in cargoes.values() for c in cs if c.get("bundle_id")]
+    )
 
     rows = []
     for order, when in in_period:
