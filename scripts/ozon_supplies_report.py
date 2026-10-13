@@ -226,7 +226,7 @@ def build_rows(
             if not bundle_id:
                 continue
             warehouse = (supply.get("storage_warehouse") or {}).get("name") or (
-                order.get("dropoff_warehouse") or {}
+                order.get("drop_off_warehouse") or order.get("dropoff_warehouse") or {}
             ).get("name", "")
             by_cargo = cargo_quantities(api, cargoes.get(supply.get("supply_id"), []))
             for item in api.get_bundle_items(bundle_id):
