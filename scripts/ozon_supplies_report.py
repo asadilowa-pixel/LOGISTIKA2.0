@@ -176,20 +176,25 @@ def supply_date(order: dict) -> datetime.datetime | None:
     return parse_dt(order.get("created_date"))
 
 
-def cargo_quantities(api: OzonApi, cargoes: list[dict]) -> dict[int, dict[str, int]] | None:
-    """SKU -> {"accepted", "lost", "pending"} по статусам грузомест; None, если грузомест нет."""
+def cargo_quantities(
+    api: OzonApi, cargoes: list[dict]
+) -> tuple[dict[int, dict[str, int]], bool] | None:
+    """SKU -> {"accepted", "lost", "pending"} по статусам грузомест и признак, что состав
+    известен у всех грузомест; None, если грузомест нет."""
     if not cargoes:
         return None
     by_sku: dict[int, dict[str, int]] = {}
+    complete = True
     for cargo in cargoes:
         status = (cargo.get("tracking_info") or {}).get("status")
         bucket = {CARGO_ACCEPTED: "accepted", CARGO_LOST: "lost"}.get(status, "pending")
-        if not cargo.get("bundle_id"):
-            continue
-        for item in api.get_bundle_items(cargo["bundle_id"]):
+        items = api.get_bundle_items(cargo["bundle_id"]) if cargo.get("bundle_id") else []
+        if not items:
+            complete = False
+        for item in items:
             counts = by_sku.setdefault(item["sku"], {"accepted": 0, "lost": 0, "pending": 0})
             counts[bucket] += item.get("quantity") or 0
-    return by_sku
+    return by_sku, complete
 
 
 def build_rows(
@@ -223,11 +228,14 @@ def build_rows(
             warehouse = (supply.get("storage_warehouse") or {}).get("name") or (
                 order.get("dropoff_warehouse") or {}
             ).get("name", "")
-            by_sku = cargo_quantities(api, cargoes.get(supply.get("supply_id"), []))
+            by_cargo = cargo_quantities(api, cargoes.get(supply.get("supply_id"), []))
             for item in api.get_bundle_items(bundle_id):
                 counts = None
-                if by_sku is not None:
-                    counts = by_sku.get(item.get("sku"), {"accepted": 0, "lost": 0, "pending": 0})
+                if by_cargo is not None:
+                    by_sku, complete = by_cargo
+                    counts = by_sku.get(item.get("sku"))
+                    if counts is None and complete:
+                        counts = {"accepted": 0, "lost": 0, "pending": 0}
                 rows.append(
                     {
                         "Дата поставки": when.date().isoformat(),
