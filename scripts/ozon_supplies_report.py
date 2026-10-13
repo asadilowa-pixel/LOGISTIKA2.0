@@ -3,10 +3,11 @@
 Строка отчёта = товар в поставке: дата, номер заявки, статус, склад, артикул, SKU,
 название, количество отгружено (из состава поставки) и количество принято.
 
-Принятое количество: Seller API отдаёт в составе поставки (/v1/supply-order/bundle)
-только заявленное количество `quantity`. Если в ответе встретится поле приёмки
-(ключ с "accept"/"received" в названии), скрипт подставит его; иначе колонка
-«Принято» останется пустой, а сырые ответы API сохранятся в *_raw.json для проверки.
+Принятое количество: Seller API не отдаёт факт приёмки по товарам, но отдаёт статус
+каждого грузоместа (/v1/cargoes/get) и его состав (/v1/supply-order/bundle). «Принято» —
+товары в грузоместах со статусом PROCESSED, «Утеряно» — в грузоместах LOST, остальное —
+«На приёмке / в пути». Расхождения внутри принятой коробки (недовложение, брак) API
+не показывает — их видно только в актах приёмки в личном кабинете.
 
 Usage:
     OZON_CLIENT_ID=... OZON_API_KEY=... \\
@@ -45,7 +46,8 @@ STATE_NAMES = {
     "COMPLETED": "Завершена",
 }
 
-ACCEPTED_KEY_HINTS = ("accept", "received")
+CARGO_ACCEPTED = "PROCESSED"
+CARGO_LOST = "LOST"
 
 CSV_COLUMNS = [
     "Дата поставки",
@@ -60,6 +62,8 @@ CSV_COLUMNS = [
     "Название",
     "Отгружено, шт",
     "Принято, шт",
+    "Утеряно, шт",
+    "На приёмке / в пути, шт",
 ]
 
 
@@ -117,6 +121,14 @@ class OzonApi:
             orders.extend(result.get("orders") or [])
         return orders
 
+    def get_cargoes(self, supply_ids: list[int]) -> dict[int, list[dict]]:
+        cargoes: dict[int, list[dict]] = {}
+        for i in range(0, len(supply_ids), 100):
+            result = self.post("/v1/cargoes/get", {"supply_ids": supply_ids[i : i + 100]})
+            for supply in result.get("supply") or []:
+                cargoes[supply["supply_id"]] = supply.get("cargoes") or []
+        return cargoes
+
     def get_bundle_items(self, bundle_id: str) -> list[dict]:
         items: list[dict] = []
         last_id = ""
@@ -149,30 +161,54 @@ def supply_date(order: dict) -> datetime.datetime | None:
     return parse_dt(order.get("created_date"))
 
 
-def accepted_quantity(item: dict) -> int | None:
-    for key, value in item.items():
-        if any(hint in key.lower() for hint in ACCEPTED_KEY_HINTS) and isinstance(value, int):
-            return value
-    return None
+def cargo_quantities(api: OzonApi, cargoes: list[dict]) -> dict[int, dict[str, int]] | None:
+    """SKU -> {"accepted", "lost", "pending"} по статусам грузомест; None, если грузомест нет."""
+    if not cargoes:
+        return None
+    by_sku: dict[int, dict[str, int]] = {}
+    for cargo in cargoes:
+        status = (cargo.get("tracking_info") or {}).get("status")
+        bucket = {CARGO_ACCEPTED: "accepted", CARGO_LOST: "lost"}.get(status, "pending")
+        if not cargo.get("bundle_id"):
+            continue
+        for item in api.get_bundle_items(cargo["bundle_id"]):
+            counts = by_sku.setdefault(item["sku"], {"accepted": 0, "lost": 0, "pending": 0})
+            counts[bucket] += item.get("quantity") or 0
+    return by_sku
 
 
 def build_rows(
     api: OzonApi, orders: list[dict], date_from: datetime.date, date_to: datetime.date
 ) -> list[dict]:
-    rows = []
+    in_period = []
     for order in orders:
         when = supply_date(order)
-        if when is None or not (date_from <= when.date() <= date_to):
-            continue
+        if when is not None and date_from <= when.date() <= date_to:
+            in_period.append((order, when))
+    supply_ids = [
+        supply["supply_id"]
+        for order, _ in in_period
+        for supply in order.get("supplies") or []
+        if supply.get("supply_id")
+    ]
+    cargoes = api.get_cargoes(supply_ids)
+
+    rows = []
+    for order, when in in_period:
         created = parse_dt(order.get("created_date"))
+        state = order.get("state", "")
         for supply in order.get("supplies") or []:
             bundle_id = supply.get("bundle_id")
             if not bundle_id:
                 continue
-            warehouse = (supply.get("storage_warehouse") or {}).get("name", "")
-            state = order.get("state", "")
+            warehouse = (supply.get("storage_warehouse") or {}).get("name") or (
+                order.get("dropoff_warehouse") or {}
+            ).get("name", "")
+            by_sku = cargo_quantities(api, cargoes.get(supply.get("supply_id"), []))
             for item in api.get_bundle_items(bundle_id):
-                accepted = accepted_quantity(item)
+                counts = None
+                if by_sku is not None:
+                    counts = by_sku.get(item.get("sku"), {"accepted": 0, "lost": 0, "pending": 0})
                 rows.append(
                     {
                         "Дата поставки": when.date().isoformat(),
@@ -186,7 +222,9 @@ def build_rows(
                         "SKU": item.get("sku", ""),
                         "Название": item.get("name", ""),
                         "Отгружено, шт": item.get("quantity", ""),
-                        "Принято, шт": "" if accepted is None else accepted,
+                        "Принято, шт": counts["accepted"] if counts else "",
+                        "Утеряно, шт": counts["lost"] if counts else "",
+                        "На приёмке / в пути, шт": counts["pending"] if counts else "",
                     }
                 )
     rows.sort(key=lambda r: (r["Дата поставки"], str(r["Номер заявки"]), r["Артикул"]))
@@ -223,13 +261,15 @@ def main() -> int:
     with open(raw_path, "w", encoding="utf-8") as f:
         json.dump(api.raw, f, ensure_ascii=False, indent=1)
 
-    shipped = sum(r["Отгружено, шт"] or 0 for r in rows)
-    accepted = [r["Принято, шт"] for r in rows if r["Принято, шт"] != ""]
-    print(f"Заявок всего: {len(orders)}, строк за период: {len(rows)}, отгружено: {shipped} шт")
-    if accepted:
-        print(f"Принято: {sum(accepted)} шт")
-    else:
-        print(f"Поле приёмки в ответе API не найдено — проверьте {raw_path}")
+    def total(column: str) -> int:
+        return sum(r[column] or 0 for r in rows)
+
+    print(f"Строк за период: {len(rows)}")
+    print(
+        f"Отгружено: {total('Отгружено, шт')} шт, принято: {total('Принято, шт')} шт, "
+        f"утеряно: {total('Утеряно, шт')} шт, на приёмке / в пути: "
+        f"{total('На приёмке / в пути, шт')} шт"
+    )
     print(f"Сохранено: {args.out}")
     return 0
 
