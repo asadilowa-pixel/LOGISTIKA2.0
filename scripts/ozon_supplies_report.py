@@ -22,6 +22,7 @@ import csv
 import datetime
 import json
 import os
+import random
 import sys
 import time
 import urllib.error
@@ -79,7 +80,7 @@ class OzonApi:
         self.raw: list[dict] = []
         self._bundle_cache: dict[str, list[dict]] = {}
 
-    def post(self, path: str, body: dict, retries: int = 5) -> dict:
+    def post(self, path: str, body: dict, retries: int = 12) -> dict:
         data = json.dumps(body).encode()
         for attempt in range(retries):
             req = urllib.request.Request(
@@ -92,7 +93,7 @@ class OzonApi:
                     return result
             except urllib.error.HTTPError as e:
                 if e.code == 429 and attempt < retries - 1:
-                    time.sleep(2**attempt)
+                    time.sleep(min(2**attempt, 10) * (0.5 + random.random()))
                     continue
                 raise RuntimeError(f"{path}: HTTP {e.code}: {e.read().decode(errors='replace')}")
         raise RuntimeError(f"{path}: rate limit, попытки исчерпаны")
@@ -131,7 +132,7 @@ class OzonApi:
                 cargoes[supply["supply_id"]] = supply.get("cargoes") or []
         return cargoes
 
-    def prefetch_bundles(self, bundle_ids: list[str], workers: int = 8) -> None:
+    def prefetch_bundles(self, bundle_ids: list[str], workers: int = 4) -> None:
         """Параллельно загружает составы — по одному их ~0.7с на запрос, а грузомест тысячи."""
         todo = [b for b in dict.fromkeys(bundle_ids) if b not in self._bundle_cache]
         with concurrent.futures.ThreadPoolExecutor(workers) as pool:
